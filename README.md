@@ -9,7 +9,7 @@ Open, inspect, and interact with VTK datasets directly in the editor.
 [![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.85.0-007ACC?style=flat-square&logo=visualstudiocode)](https://code.visualstudio.com/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square)]()
 
-Publisher: Nahiid Islam
+Publisher: Nahiid Islam 
 
 </div>
 
