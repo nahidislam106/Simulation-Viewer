@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Simulation Viewer</title>
+<script src="__VTK_JS_URI__"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #06131b;
+    --bg-2: #0d1f2c;
+    --panel: rgba(9, 25, 36, 0.84);
+    --panel-2: rgba(14, 35, 49, 0.86);
+    --surface: rgba(18, 45, 62, 0.78);
+    --border: rgba(120, 170, 196, 0.26);
+    --border-strong: rgba(145, 198, 224, 0.42);
+    --accent: #26d0c9;
+    --accent-2: #14b8ff;
+    --accent-hover: #5ad9d3;
+    --text: #e9f6ff;
+    --text-muted: #b3d2e3;
+    --text-dim: #81a7ba;
+    --ok: #5cf0a2;
+    --warn: #ffbd62;
+    --err: #ff7f8f;
+    --shadow: 0 16px 34px rgba(0, 0, 0, 0.38);
+    --font: 'Space Grotesk', 'Manrope', 'Segoe UI', sans-serif;
+    --mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+  }
+
+  html, body {
+    height: 100%;
+    font-family: var(--font);
+    font-size: 13px;
+    overflow: hidden;
+    background:
+      radial-gradient(1200px 580px at -10% -20%, rgba(35, 151, 171, 0.28), transparent 58%),
+      radial-gradient(980px 420px at 120% -10%, rgba(20, 184, 255, 0.24), transparent 56%),
+      linear-gradient(150deg, var(--bg), var(--bg-2));
+    color: var(--text);
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    animation: appFade 280ms ease-out;
+  }
+
+  #header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    height: 48px;
+    min-height: 48px;
+    background: linear-gradient(90deg, var(--panel), rgba(9, 25, 36, 0.67));
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+    user-select: none;
+    z-index: 15;
+  }
+
+  #header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  #file-icon {
+    color: var(--accent);
+    font-size: 16px;
+    text-shadow: 0 0 12px rgba(38, 208, 201, 0.45);
+    flex-shrink: 0;
+  }
+
+  #filename {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 440px;
+  }
+
+  #status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 11px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    transition: all 180ms ease;
+  }
+
+  #status-badge.ready {
+    background: rgba(22, 78, 56, 0.5);
+    border-color: rgba(92, 240, 162, 0.5);
+    color: var(--ok);
+  }
+
+  #status-badge.pending {
+    background: rgba(110, 70, 15, 0.45);
+    border-color: rgba(255, 189, 98, 0.5);
+    color: var(--warn);
+  }
+
+  #status-badge.error {
+    background: rgba(111, 28, 45, 0.45);
+    border-color: rgba(255, 127, 143, 0.5);
+    color: var(--err);
+  }
+
+  #status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 8px currentColor;
+  }
+
+  #main {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  #viewport {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    background: radial-gradient(circle at 30% 15%, rgba(61, 124, 160, 0.24), rgba(7, 20, 30, 0.9));
+  }
+
+  #vtk-container { width: 100%; height: 100%; }
+  #vtk-container canvas { display: block; }
+
+  #overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(160deg, rgba(6, 19, 27, 0.84), rgba(13, 31, 44, 0.86));
+    backdrop-filter: blur(7px);
+    gap: 18px;
+  }
+
+  #overlay.hidden { display: none; }
+
+  #progress-wrap {
+    width: min(340px, 86%);
+    background: rgba(14, 35, 49, 0.78);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 16px 12px;
+    box-shadow: var(--shadow);
+  }
+
+  #progress-label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  #progress-bar-track {
+    width: 100%;
+    height: 7px;
+    background: rgba(126, 182, 210, 0.22);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  #progress-bar-fill {
+    height: 7px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border-radius: 999px;
+    width: 0%;
+    transition: width 340ms ease;
+  }
+
+  #progress-msg {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: center;
+  }
+
+  #pending-card,
+  #error-card {
+    background: rgba(10, 26, 38, 0.9);
+    border-radius: 12px;
+    padding: 24px 28px;
+    max-width: 460px;
+    text-align: left;
+    box-shadow: var(--shadow);
+    display: none;
+  }
+
+  #pending-card {
+    border: 1px solid rgba(255, 189, 98, 0.44);
+  }
+
+  #pending-card.visible,
+  #error-card.visible {
+    display: block;
+    animation: cardRise 210ms ease-out;
+  }
+
+  #pending-card h3 {
+    color: var(--warn);
+    margin-bottom: 12px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.03em;
+  }
+
+  #pending-card p {
+    color: var(--text-muted);
+    line-height: 1.7;
+    font-size: 12px;
+    white-space: pre-line;
+  }
+
+  #error-card {
+    border: 1px solid rgba(255, 127, 143, 0.5);
+  }
+
+  #error-card h3 {
+    color: var(--err);
+    margin-bottom: 8px;
+  }
+
+  #error-card p {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-family: var(--mono);
+    word-break: break-word;
+  }
+
+  #controls {
+    width: 294px;
+    min-width: 294px;
+    background: linear-gradient(180deg, rgba(10, 27, 39, 0.92), rgba(12, 32, 46, 0.88));
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-shadow: var(--shadow);
+  }
+
+  #controls::-webkit-scrollbar { width: 8px; }
+  #controls::-webkit-scrollbar-thumb {
+    background: rgba(98, 146, 175, 0.4);
+    border-radius: 999px;
+  }
+
+  .ctrl-section {
+    padding: 14px 14px 13px;
+    border-bottom: 1px solid rgba(120, 170, 196, 0.2);
+    animation: cardRise 260ms ease both;
+  }
+
+  .ctrl-section:last-child { border-bottom: none; }
+  .ctrl-section:nth-child(1) { animation-delay: 30ms; }
+  .ctrl-section:nth-child(2) { animation-delay: 60ms; }
+  .ctrl-section:nth-child(3) { animation-delay: 90ms; }
+  .ctrl-section:nth-child(4) { animation-delay: 120ms; }
+  .ctrl-section:nth-child(5) { animation-delay: 150ms; }
+  .ctrl-section:nth-child(6) { animation-delay: 180ms; }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+
+  select,
+  .range-row input[type=number] {
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 9px;
+    padding: 7px 9px;
+    font-size: 12px;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  select {
+    cursor: pointer;
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%), linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+    background-position: calc(100% - 13px) calc(50% - 3px), calc(100% - 8px) calc(50% - 3px);
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 30px;
+  }
+
+  select:focus,
+  .range-row input[type=number]:focus {
+    outline: none;
+    border-color: var(--border-strong);
+    box-shadow: 0 0 0 2px rgba(38, 208, 201, 0.22);
+  }
+
+  .range-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+  }
+
+  .range-row label {
+    font-size: 11px;
+    color: var(--text-muted);
+    width: 28px;
+    flex-shrink: 0;
+  }
+
+  .range-row input[type=number] {
+    font-family: var(--mono);
+    min-width: 0;
+    padding: 6px 8px;
+  }
+
+  input[type=range] {
+    width: 100%;
+    margin-top: 8px;
+    accent-color: var(--accent);
+    height: 5px;
+    cursor: pointer;
+  }
+
+  .slider-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    cursor: pointer;
+    padding: 4px 0;
+  }
+
+  .check-row input[type=checkbox] {
+    accent-color: var(--accent);
+    cursor: pointer;
+    transform: translateY(-1px);
+  }
+
+  .check-row span {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .axis-group { display: flex; gap: 6px; margin-top: 8px; }
+
+  .axis-btn {
+    flex: 1;
+    padding: 7px 0;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    background: var(--surface);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 140ms ease;
+  }
+
+  .axis-btn:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+
+  .axis-btn.active {
+    background: linear-gradient(90deg, rgba(38, 208, 201, 0.32), rgba(20, 184, 255, 0.25));
+    color: #dffffd;
+    border-color: rgba(90, 217, 211, 0.65);
+    box-shadow: 0 8px 16px rgba(20, 184, 255, 0.18) inset;
+  }
+
+  .ctrl-btn {
+    width: 100%;
+    padding: 9px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 120ms ease, background 140ms ease, box-shadow 140ms ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: #06232b;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    box-shadow: 0 8px 16px rgba(20, 184, 255, 0.2);
+  }
+
+  .ctrl-btn:hover {
+    transform: translateY(-1px);
+    background: linear-gradient(90deg, var(--accent-hover), #5ed3ff);
+  }
+
+  .ctrl-btn.secondary {
+    background: var(--surface);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    margin-top: 7px;
+    box-shadow: none;
+  }
+
+  .ctrl-btn.secondary:hover {
+    color: var(--text);
+    border-color: var(--border-strong);
+    background: rgba(19, 53, 73, 0.84);
+  }
+
+  #stats-content {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 2;
+    font-family: var(--mono);
+  }
+
+  #stats-content .stat-row { display: flex; justify-content: space-between; }
+  #stats-content .stat-val { color: var(--text-muted); }
+
+  .ctrl-section.disabled { opacity: 0.44; pointer-events: none; filter: grayscale(0.22); }
+
+  @media (max-width: 900px) {
+    #main {
+      flex-direction: column;
+      padding: 8px;
+      gap: 8px;
+    }
+
+    #controls {
+      width: 100%;
+      min-width: 0;
+      max-height: 43vh;
+      border-radius: 12px;
+    }
+
+    #filename { max-width: 220px; }
+  }
+
+  @keyframes cardRise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes appFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <div id="header">
+    <div id="header-left">
+      <span id="file-icon">⬡</span>
+      <span id="filename">No file loaded</span>
+    </div>
+    <span id="status-badge"><span id="status-dot"></span><span id="status-text">Loading</span></span>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main">
+
+    <!-- VIEWPORT -->
+    <div id="viewport">
+      <div id="vtk-container"></div>
+
+      <!-- OVERLAY -->
+      <div id="overlay">
+        <div id="progress-wrap">
+          <div id="progress-label">
+            <span id="progress-title">Initializing...</span>
+            <span id="progress-pct">0%</span>
+          </div>
+          <div id="progress-bar-track"><div id="progress-bar-fill"></div></div>
+          <div id="progress-msg">Starting backend...</div>
+        </div>
+
+        <div id="pending-card">
+          <h3>⚠ Pending Conversion</h3>
+          <p id="pending-msg"></p>
+        </div>
+
+        <div id="error-card">
+          <h3>Error</h3>
+          <p id="error-msg"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div id="controls">
+
+      <div class="ctrl-section disabled" id="sect-scalar">
+        <div class="section-label">Scalar Field</div>
+        <select id="scalar-select"><option value="">— None —</option></select>
+      </div>
+
+      <div class="ctrl-section disabled" id="sect-colormap">
+        <div class="section-label">Colormap</div>
+        <select id="colormap-select">
+          <option value="rainbow">Rainbow</option>
+          <option value="viridis" selected>Viridis</option>
+          <option value="coolwarm">Cool to Warm</option>
+          <option value="plasma">Plasma</option>
+          <option value="grayscale">Grayscale</option>
+        </select>
+      </div>
+
+      <div class="ctrl-section disabled" id="sect-range">
+        <div class="section-label">Scalar Range</div>
+        <div class="range-row">
+          <label>Min</label>
+          <input type="number" id="range-min" step="any" placeholder="auto"/>
+        </div>
+        <div class="range-row">
+          <label>Max</label>
+          <input type="number" id="range-max" step="any" placeholder="auto"/>
+        </div>
+        <button class="ctrl-btn secondary" id="reset-range-btn">↺ Reset Range</button>
+      </div>
+
+      <div class="ctrl-section disabled" id="sect-clip">
+        <div class="section-label">Clip Plane</div>
+        <label class="check-row">
+          <input type="checkbox" id="clip-toggle"/>
+          <span>Enable clip plane</span>
+        </label>
+        <div class="axis-group">
+          <div class="axis-btn active" data-axis="0">X</div>
+          <div class="axis-btn" data-axis="1">Y</div>
+          <div class="axis-btn" data-axis="2">Z</div>
+        </div>
+        <input type="range" id="clip-slider" min="0" max="100" value="50"/>
+        <div class="slider-labels"><span>Min</span><span>Max</span></div>
+      </div>
+
+      <div class="ctrl-section disabled" id="sect-display">
+        <div class="section-label">Display</div>
+        <label class="check-row">
+          <input type="checkbox" id="axes-toggle" checked/>
+          <span>Show axes</span>
+        </label>
+        <label class="check-row" style="margin-top:4px">
+          <input type="checkbox" id="bbox-toggle" checked/>
+          <span>Bounding box</span>
+        </label>
+        <div style="margin-top:10px; font-size:11px; color:var(--text-dim)">Opacity</div>
+        <input type="range" id="opacity-slider" min="0" max="100" value="100"/>
+        <div class="slider-labels"><span>0%</span><span>100%</span></div>
+      </div>
+
+      <div class="ctrl-section disabled" id="sect-export">
+        <div class="section-label">Export</div>
+        <button class="ctrl-btn" id="screenshot-btn">📷 Save Screenshot</button>
+      </div>
+
+      <div class="ctrl-section" id="sect-stats">
+        <div class="section-label">Stats</div>
+        <div id="stats-content" style="color:var(--text-dim);font-size:11px">—</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ── VS Code API ──────────────────────────────────────────────────────────────
+const vscode = acquireVsCodeApi();
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let renderer, renderWindow, renderWindowInteractor;
+let mainActor, mainMapper, outlineActor, axesActor, clipActor, clipMapper;
+let polyData = null;
+let currentScalars = [];
+let autoRange = { min: 0, max: 1 };
+let clipAxis = 0;
+let isReady = false;
+
+// ── DOM REFS ─────────────────────────────────────────────────────────────────
+const overlay        = document.getElementById('overlay');
+const progressFill   = document.getElementById('progress-bar-fill');
+const progressPct    = document.getElementById('progress-pct');
+const progressTitle  = document.getElementById('progress-title');
+const progressMsg    = document.getElementById('progress-msg');
+const pendingCard    = document.getElementById('pending-card');
+const pendingMsgEl   = document.getElementById('pending-msg');
+const errorCard      = document.getElementById('error-card');
+const errorMsgEl     = document.getElementById('error-msg');
+const filenamEl      = document.getElementById('filename');
+const statusText     = document.getElementById('status-text');
+const statusBadge    = document.getElementById('status-badge');
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+function setStatus(text, cls) {
+  statusText.textContent = text;
+  statusBadge.className = cls ? `${cls}` : '';
+}
+
+function setProgress(percent, title, msg) {
+  progressFill.style.width = percent + '%';
+  progressPct.textContent  = percent + '%';
+  if (title) progressTitle.textContent = title;
+  if (msg)   progressMsg.textContent   = msg;
+}
+
+function showOverlay(mode) {
+  // mode: 'progress' | 'pending' | 'error' | 'hidden'
+  overlay.classList.toggle('hidden', mode === 'hidden');
+  pendingCard.classList.toggle('visible', mode === 'pending');
+  errorCard.classList.toggle('visible', mode === 'error');
+  document.getElementById('progress-wrap').style.display =
+    mode === 'progress' ? 'block' : 'none';
+}
+
+function enableControls() {
+  ['sect-scalar','sect-colormap','sect-range','sect-clip','sect-display','sect-export']
+    .forEach(id => document.getElementById(id).classList.remove('disabled'));
+}
+
+function updateStats(stats) {
+  if (!stats) return;
+  const b = stats.bounds.map(v => v.toFixed(3));
+  document.getElementById('stats-content').innerHTML = `
+    <div class="stat-row"><span>Points</span><span class="stat-val">${stats.points.toLocaleString()}</span></div>
+    <div class="stat-row"><span>Cells</span><span class="stat-val">${stats.cells.toLocaleString()}</span></div>
+    <div class="stat-row"><span>X</span><span class="stat-val">${b[0]} → ${b[1]}</span></div>
+    <div class="stat-row"><span>Y</span><span class="stat-val">${b[2]} → ${b[3]}</span></div>
+    <div class="stat-row"><span>Z</span><span class="stat-val">${b[4]} → ${b[5]}</span></div>
+  `;
+}
+
+// ── COLORMAP BUILDER ─────────────────────────────────────────────────────────
+function buildColormap(name) {
+  const ctf = vtk.Rendering.Core.vtkColorTransferFunction.newInstance();
+  switch (name) {
+    case 'viridis':
+      ctf.addRGBPoint(0.00, 0.267, 0.005, 0.329);
+      ctf.addRGBPoint(0.25, 0.282, 0.341, 0.608);
+      ctf.addRGBPoint(0.50, 0.129, 0.571, 0.553);
+      ctf.addRGBPoint(0.75, 0.369, 0.788, 0.384);
+      ctf.addRGBPoint(1.00, 0.993, 0.906, 0.144);
+      break;
+    case 'coolwarm':
+      ctf.addRGBPoint(0.00, 0.230, 0.299, 0.754);
+      ctf.addRGBPoint(0.50, 0.865, 0.865, 0.865);
+      ctf.addRGBPoint(1.00, 0.706, 0.016, 0.150);
+      break;
+    case 'plasma':
+      ctf.addRGBPoint(0.00, 0.050, 0.030, 0.528);
+      ctf.addRGBPoint(0.25, 0.459, 0.066, 0.600);
+      ctf.addRGBPoint(0.50, 0.798, 0.182, 0.470);
+      ctf.addRGBPoint(0.75, 0.973, 0.463, 0.186);
+      ctf.addRGBPoint(1.00, 0.940, 0.975, 0.131);
+      break;
+    case 'grayscale':
+      ctf.addRGBPoint(0.00, 0.0, 0.0, 0.0);
+      ctf.addRGBPoint(1.00, 1.0, 1.0, 1.0);
+      break;
+    default: // rainbow
+      ctf.addRGBPoint(0.00, 0.0, 0.0, 1.0);
+      ctf.addRGBPoint(0.25, 0.0, 1.0, 1.0);
+      ctf.addRGBPoint(0.50, 0.0, 1.0, 0.0);
+      ctf.addRGBPoint(0.75, 1.0, 1.0, 0.0);
+      ctf.addRGBPoint(1.00, 1.0, 0.0, 0.0);
+  }
+  return ctf;
+}
+
+// ── APPLY SCALAR COLORING ────────────────────────────────────────────────────
+function applyScalar() {
+  if (!mainMapper || !polyData) return;
+
+  const scalarName = document.getElementById('scalar-select').value;
+  const colormapName = document.getElementById('colormap-select').value;
+  const minVal = parseFloat(document.getElementById('range-min').value);
+  const maxVal = parseFloat(document.getElementById('range-max').value);
+
+  if (!scalarName) {
+    mainMapper.setScalarVisibility(false);
+    renderWindow.render();
+    return;
+  }
+
+  const scalar = currentScalars.find(s => s.name === scalarName);
+  if (!scalar) return;
+
+  const lo = isNaN(minVal) ? scalar.min : minVal;
+  const hi = isNaN(maxVal) ? scalar.max : maxVal;
+
+  mainMapper.setScalarVisibility(true);
+  mainMapper.setColorByArrayName(scalarName);
+
+  if (scalar.association === 'point') {
+    mainMapper.setScalarModeToUsePointFieldData();
+  } else {
+    mainMapper.setScalarModeToUseCellFieldData();
+  }
+
+  const ctf = buildColormap(colormapName);
+  ctf.setMappingRange(lo, hi);
+  ctf.updateRange();
+
+  mainMapper.setLookupTable(ctf);
+  mainMapper.setScalarRange(lo, hi);
+  mainMapper.setUseLookupTableScalarRange(true);
+
+  renderWindow.render();
+}
+
+// ── APPLY CLIP PLANE ─────────────────────────────────────────────────────────
+function applyClip() {
+  if (!polyData || !renderer) return;
+
+  const enabled = document.getElementById('clip-toggle').checked;
+
+  // remove old clip actor
+  if (clipActor) {
+    renderer.removeActor(clipActor);
+    clipActor = null;
+    clipMapper = null;
+  }
+
+  if (mainActor) mainActor.setVisibility(!enabled || false);
+
+  if (!enabled) {
+    if (mainActor) mainActor.setVisibility(true);
+    renderWindow.render();
+    return;
+  }
+
+  if (mainActor) mainActor.setVisibility(false);
+
+  const bounds = polyData.getBounds();
+  // bounds: [xmin, xmax, ymin, ymax, zmin, zmax]
+  const axisMin = bounds[clipAxis * 2];
+  const axisMax = bounds[clipAxis * 2 + 1];
+  const sliderVal = parseInt(document.getElementById('clip-slider').value, 10) / 100;
+  const origin = [0, 0, 0];
+  origin[clipAxis] = axisMin + (axisMax - axisMin) * sliderVal;
+
+  const normal = [0, 0, 0];
+  normal[clipAxis] = 1;
+
+  const plane = vtk.Common.DataModel.vtkPlane.newInstance();
+  plane.setOrigin(...origin);
+  plane.setNormal(...normal);
+
+  const cutter = vtk.Filters.Core.vtkCutter.newInstance();
+  cutter.setInputData(polyData);
+  cutter.setCutFunction(plane);
+
+  clipMapper = vtk.Rendering.Core.vtkMapper.newInstance();
+  clipMapper.setInputConnection(cutter.getOutputPort());
+
+  clipActor = vtk.Rendering.Core.vtkActor.newInstance();
+  clipActor.setMapper(clipMapper);
+  clipActor.getProperty().setColor(0.9, 0.9, 0.9);
+
+  renderer.addActor(clipActor);
+  renderWindow.render();
+}
+
+// ── LOAD DATASET ─────────────────────────────────────────────────────────────
+async function loadDataset(url) {
+  try {
+    setProgress(60, 'Downloading dataset...', 'Fetching processed mesh...');
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+
+    setProgress(80, 'Parsing mesh...', 'Reading VTP format...');
+    const buf = await resp.arrayBuffer();
+
+    const reader = vtk.IO.XML.vtkXMLPolyDataReader.newInstance();
+    reader.parseAsArrayBuffer(buf);
+    polyData = reader.getOutputData(0);
+
+    setProgress(90, 'Rendering...', 'Building scene...');
+
+    const container = document.getElementById('vtk-container');
+
+    const fullScreenRenderer = vtk.Rendering.Misc.vtkFullScreenRenderWindow.newInstance({
+      rootContainer: container,
+      background: [0.118, 0.118, 0.118],
+    });
+
+    renderer = fullScreenRenderer.getRenderer();
+    renderWindow = fullScreenRenderer.getRenderWindow();
+    renderWindowInteractor = fullScreenRenderer.getInteractor();
+
+    // Main mesh actor
+    mainMapper = vtk.Rendering.Core.vtkMapper.newInstance();
+    mainMapper.setInputData(polyData);
+    mainActor = vtk.Rendering.Core.vtkActor.newInstance();
+    mainActor.setMapper(mainMapper);
+    renderer.addActor(mainActor);
+
+    // Outline
+    const outline = vtk.Filters.General.vtkOutlineFilter.newInstance();
+    outline.setInputData(polyData);
+    const outlineMapper = vtk.Rendering.Core.vtkMapper.newInstance();
+    outlineMapper.setInputConnection(outline.getOutputPort());
+    outlineActor = vtk.Rendering.Core.vtkActor.newInstance();
+    outlineActor.setMapper(outlineMapper);
+    outlineActor.getProperty().setColor(0.4, 0.4, 0.4);
+    renderer.addActor(outlineActor);
+
+    // Axes
+    axesActor = vtk.Rendering.Core.vtkAxesActor.newInstance();
+    renderer.addActor(axesActor);
+
+    renderer.resetCamera();
+    renderWindow.render();
+
+    // Apply default scalar if available
+    if (currentScalars.length > 0) {
+      applyScalar();
+    }
+
+    // Resize observer
+    const ro = new ResizeObserver(() => {
+      if (renderWindow) renderWindow.render();
+    });
+    ro.observe(container);
+
+    setProgress(100, 'Ready', 'Mesh loaded successfully');
+    setTimeout(() => {
+      showOverlay('hidden');
+      isReady = true;
+      enableControls();
+    }, 300);
+
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+}
+
+function showError(msg) {
+  setStatus('Error', 'error');
+  errorMsgEl.textContent = msg;
+  showOverlay('error');
+}
+
+// ── POPULATE SCALAR DROPDOWN ─────────────────────────────────────────────────
+function populateScalars(scalars) {
+  currentScalars = scalars;
+  const sel = document.getElementById('scalar-select');
+  sel.innerHTML = '<option value="">— None —</option>';
+  scalars.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.name;
+    opt.textContent = `${s.name}  [${s.association}]`;
+    sel.appendChild(opt);
+  });
+  if (scalars.length > 0) {
+    sel.value = scalars[0].name;
+    autoRange = { min: scalars[0].min, max: scalars[0].max };
+    document.getElementById('range-min').value = autoRange.min.toFixed(6);
+    document.getElementById('range-max').value = autoRange.max.toFixed(6);
+  }
+}
+
+// ── MESSAGE HANDLER ──────────────────────────────────────────────────────────
+window.addEventListener('message', async (event) => {
+  const msg = event.data;
+
+  if (msg.type === 'progress') {
+    setProgress(msg.percent, null, msg.message);
+    return;
+  }
+
+  if (msg.type === 'fileReady') {
+    if (msg.fileName) {
+      filenamEl.textContent = msg.fileName;
+      filenamEl.title = msg.fileName;
+    }
+    setStatus('Ready', 'ready');
+    populateScalars(msg.scalars || []);
+    updateStats(msg.stats);
+    await loadDataset(msg.datasetUrl);
+    return;
+  }
+
+  if (msg.type === 'pending') {
+    if (msg.fileName) {
+      filenamEl.textContent = msg.fileName;
+    }
+    setStatus('Pending', 'pending');
+    pendingMsgEl.textContent = msg.message || '';
+    showOverlay('pending');
+    return;
+  }
+
+  if (msg.type === 'error') {
+    setStatus('Error', 'error');
+    showError(msg.message || 'Unknown error');
+    return;
+  }
+});
+
+// ── UI EVENT LISTENERS ────────────────────────────────────────────────────────
+document.getElementById('scalar-select').addEventListener('change', () => {
+  const sel = document.getElementById('scalar-select').value;
+  const scalar = currentScalars.find(s => s.name === sel);
+  if (scalar) {
+    autoRange = { min: scalar.min, max: scalar.max };
+    document.getElementById('range-min').value = scalar.min.toFixed(6);
+    document.getElementById('range-max').value = scalar.max.toFixed(6);
+  }
+  applyScalar();
+});
+
+document.getElementById('colormap-select').addEventListener('change', applyScalar);
+document.getElementById('range-min').addEventListener('change', applyScalar);
+document.getElementById('range-max').addEventListener('change', applyScalar);
+
+document.getElementById('reset-range-btn').addEventListener('click', () => {
+  document.getElementById('range-min').value = autoRange.min.toFixed(6);
+  document.getElementById('range-max').value = autoRange.max.toFixed(6);
+  applyScalar();
+});
+
+document.getElementById('clip-toggle').addEventListener('change', applyClip);
+document.getElementById('clip-slider').addEventListener('input', applyClip);
+
+document.querySelectorAll('.axis-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.axis-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    clipAxis = parseInt(btn.dataset.axis, 10);
+    applyClip();
+  });
+});
+
+document.getElementById('axes-toggle').addEventListener('change', (e) => {
+  if (axesActor) {
+    axesActor.setVisibility(e.target.checked);
+    renderWindow.render();
+  }
+});
+
+document.getElementById('bbox-toggle').addEventListener('change', (e) => {
+  if (outlineActor) {
+    outlineActor.setVisibility(e.target.checked);
+    renderWindow.render();
+  }
+});
+
+document.getElementById('opacity-slider').addEventListener('input', (e) => {
+  if (mainActor) {
+    mainActor.getProperty().setOpacity(parseInt(e.target.value, 10) / 100);
+    renderWindow.render();
+  }
+});
+
+document.getElementById('screenshot-btn').addEventListener('click', () => {
+  if (!renderWindow) return;
+  const images = renderWindow.captureImages();
+  if (images && images[0]) {
+    images[0].then(dataUrl => {
+      vscode.postMessage({ type: 'screenshot', dataUrl });
+    }).catch(err => {
+      vscode.postMessage({ type: 'error', message: 'Screenshot failed: ' + err.message });
+    });
+  }
+});
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+if (typeof vtk === 'undefined') {
+  setStatus('Error', 'error');
+  showError('Failed to load vtk.js runtime. Check internet access or firewall/proxy settings.');
+} else {
+showOverlay('progress');
+setProgress(0, 'Initializing...', 'Waiting for backend...');
+vscode.postMessage({ type: 'ready' });
+}
+</script>
+</body>
+</html>
