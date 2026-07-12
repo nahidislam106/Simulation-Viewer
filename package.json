@@ -2,7 +2,7 @@
   "name": "simulation-viewer",
   "displayName": "Simulation Viewer",
   "description": "3D simulation file viewer for .vtk .vtu .vtp .mph files",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "NahiidIslam",
   "license": "MIT",
   "repository": {
